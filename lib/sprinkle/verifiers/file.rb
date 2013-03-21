@@ -21,15 +21,23 @@ module Sprinkle
       def file_contains(path, text)
         @commands << "grep '#{text}' #{path}"
       end
+      
       def user_present(username) 
         has_user username
       end
+      
       def matches_local(localfile, remotefile, mode=nil)
         raise "Couldn't find local file #{localfile}" unless ::File.exists?(localfile)
         require 'digest/md5'
         local = Digest::MD5.hexdigest(::File.read(localfile))
         @commands << %{[ "X$(md5sum #{remotefile}|cut -d\\  -f 1)" = "X#{local}" ]}
       end
+      
+       # Checks to make sure the file <tt>path</tt> is not on the remote server.
+      def lacks_file(path)
+        @commands << "test ! -f #{path}"
+      end
+      
     end
   end
 end

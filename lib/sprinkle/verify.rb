@@ -62,7 +62,7 @@ module Sprinkle
     include Sprinkle::Configurable
     attr_accessor :package, :description, :commands #:nodoc:
     
-    class <<self
+    class << self
       # Register a verification module
       def register(new_module)
         class_eval { include new_module }
