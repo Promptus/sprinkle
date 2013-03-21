@@ -11,6 +11,12 @@ module Sprinkle
       def has_directory(dir)
         @commands << "test -d #{dir}"
       end
+      
+      # Tests that the directory <tt>dir</tt> does not exist.
+      def lacks_directory(dir)
+        @commands << "test ! -d #{dir}"
+      end
+      
     end
   end
 end
