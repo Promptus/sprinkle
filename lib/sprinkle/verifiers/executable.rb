@@ -48,6 +48,11 @@ module Sprinkle
       def has_version_in_grep(cmd, version)
         @commands << "[ -n \"`#{cmd} 2> /dev/null | egrep -e \\\"#{version}\\\"`\" ]"
       end
+      
+      def command_succeeds(cmd)
+        @commands << "#{cmd} > /dev/null 2>&1"
+      end
+      
     end
   end
 end
