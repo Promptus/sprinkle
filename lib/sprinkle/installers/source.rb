@@ -62,23 +62,42 @@ module Sprinkle
     #     end
     #   end
     #
+    # Fifth, specifying a custom directory where the archive actually is extracted to:
+    #
+    #   package :ruby_build do
+    #     source 'https://github.com/sstephenson/ruby-build/archive/v20130227.tar.gz' do
+    #       custom_dir 'ruby-build-20130227'
+    #       custom_install './install.sh'
+    #     end
+    #   end
+    #
     # As you can see, setting options is as simple as creating a
     # block and calling the option as a method with the value as
     # its parameter.
 
     class Source < Installer
       attr_accessor :source #:nodoc:
+      
+      api do
+        def source(source, options = {}, &block)
+          @recommends << :build_essential # Ubuntu/Debian
+          install Source.new(self, source, options, &block)
+        end
+      end
 
       def initialize(parent, source, options = {}, &block) #:nodoc:
-        @source = source
         super parent, options, &block
+        @source = source
+      end
+      
+      multi_attributes :enable, :disable, :with, :without, :option, 
+        :custom_install
+      
+      def install_sequence #:nodoc:
+        prepare + download + extract + configure + build + install
       end
 
       protected
-
-        def install_sequence #:nodoc:
-          prepare + download + extract + configure + build + install
-        end
 
         %w( prepare download extract configure build install ).each do |stage|
           define_method stage do
@@ -91,23 +110,23 @@ module Sprinkle
           raise 'No build area defined' unless @options[:builds]
           raise 'No source download area defined' unless @options[:archives]
 
-          [ "mkdir -p #{@options[:prefix].first}",
-            "mkdir -p #{@options[:builds].first}",
-            "mkdir -p #{@options[:archives].first}" ]
+          [ "mkdir -p #{@options[:prefix]}",
+            "mkdir -p #{@options[:builds]}",
+            "mkdir -p #{@options[:archives]}" ]
         end
 
         def download_commands #:nodoc:
-          [ "wget -cq -O '#{@options[:archives].first}/#{archive_name}' #{@source}" ]
+          [ "wget -cq -O '#{@options[:archives]}/#{archive_name}' #{@source}" ]
         end
 
         def extract_commands #:nodoc:
-          [ "bash -c 'cd #{@options[:builds].first} && #{extract_command} #{@options[:archives].first}/#{archive_name}'" ]
+          [ "bash -c 'cd #{@options[:builds]} && #{extract_command} #{@options[:archives]}/#{archive_name}'" ]
         end
 
         def configure_commands #:nodoc:
           return [] if custom_install?
 
-          command = "bash -c 'cd #{build_dir} && ./configure --prefix=#{@options[:prefix].first} "
+          command = "bash -c 'cd #{build_dir} && ./configure --prefix=#{@options[:prefix]} "
 
           extras = {
             :enable  => '--enable', :disable => '--disable',
@@ -136,21 +155,33 @@ module Sprinkle
 
         # REVISIT: must be better processing of custom install commands somehow? use splat operator?
         def custom_install_commands #:nodoc:
-          dress @options[:custom_install], :install
+          dress @options[:custom_install], nil, :install
         end
 
       protected
+      
+        def pre_commands(stage) #:nodoc:
+          dress @pre[stage] || [], :pre, stage
+        end
+
+        def post_commands(stage) #:nodoc:
+          dress @post[stage] || [], :post, stage
+        end
+      
 
         # dress is overriden from the base Sprinkle::Installers::Installer class so that the command changes
         # directory to the build directory first. Also, the result of the command is logged.
-        def dress(commands, stage)
-          commands.collect { |command| "bash -c 'cd #{build_dir} && #{command} >> #{@package.name}-#{stage}.log 2>&1'" }
+        def dress(commands, pre_or_post, stage)
+          chdir = "cd #{build_dir} && "
+          chdir = "" if [:prepare, :download].include?(stage)
+          chdir = "" if stage == :extract and pre_or_post == :pre
+          commands.collect { |command| "bash -c '#{chdir}#{command} >> #{@package.name}-#{stage}.log 2>&1'" }
         end
 
       private
 
         def create_options(key, prefix) #:nodoc:
-          @options[key].first.inject('') { |m, option| m << "#{prefix}-#{option} "; m }
+          @options[key].inject('') { |m, option| m << "#{prefix}-#{option} "; m }
         end
 
         def extract_command #:nodoc:
@@ -179,7 +210,7 @@ module Sprinkle
         end
 
         def build_dir #:nodoc:
-          "#{@options[:builds].first}/#{options[:custom_dir] || base_dir}"
+          "#{@options[:builds]}/#{options[:custom_dir] || base_dir}"
         end
 
         def base_dir #:nodoc:

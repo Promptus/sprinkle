@@ -3,11 +3,17 @@ require File.expand_path("../../spec_helper", File.dirname(__FILE__))
 describe Sprinkle::Installers::Apt do
 
   before do
-    @package = mock(Sprinkle::Package, :name => 'package')
+    @package = create_pkg "name", :use_sudo => false
+  end
+  
+  def create_pkg(name="name", opts={})
+    @package = Sprinkle::Package::Package.new(name) {}
+    @package.use_sudo opts[:use_sudo]
+    @package
   end
 
   def create_apt(*debs, &block)
-    Sprinkle::Installers::Apt.new(@package, *debs, &block)
+    installer=@package.apt *debs, &block
   end
 
   describe 'when created' do
@@ -28,6 +34,7 @@ describe Sprinkle::Installers::Apt do
     end
 
   end
+  
 
   describe 'during installation' do
 
@@ -37,6 +44,20 @@ describe Sprinkle::Installers::Apt do
         post :install, 'op2'
       end
       @install_commands = @installer.send :install_commands
+    end
+    
+    it 'should use sudo if package specifies' do
+      @package = create_pkg "name", :use_sudo => true
+      @installer = create_apt 'ruby'
+      @install_commands = @installer.send :install_commands
+      @install_commands.should =~ /sudo env/
+    end
+    
+    it 'should use sudo if installer specifies' do
+      @package = create_pkg "name", :use_sudo => false
+      @installer = create_apt 'ruby', :sudo => true
+      @install_commands = @installer.send :install_commands
+      @install_commands.should =~ /sudo env/
     end
 
     it 'should invoke the apt installer for all specified packages' do
@@ -52,7 +73,8 @@ describe Sprinkle::Installers::Apt do
     end
 
     it 'should install a specific version if defined' do
-      pending
+      @installer = create_apt 'ruby=2'
+      @installer.send(:install_sequence).should == [ %(env DEBCONF_TERSE='yes' DEBIAN_PRIORITY='critical' DEBIAN_FRONTEND=noninteractive apt-get --force-yes -qyu install ruby=2)]
     end
 
   end

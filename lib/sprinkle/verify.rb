@@ -59,15 +59,20 @@ module Sprinkle
   #     verify { has_magic_beans('ranch') }
   #   end
   class Verify
-    include Sprinkle::Configurable
+    include Sprinkle::Attributes
     attr_accessor :package, :description, :commands #:nodoc:
     
-    class << self
+    delegate :opts, :to => :package
+    delegate :args, :to => :package
+
+    class <<self
       # Register a verification module
       def register(new_module)
         class_eval { include new_module }
       end
     end
+    
+    attributes :padding
     
     def initialize(package, description = '', &block) #:nodoc:
       raise 'Verify requires a block.' unless block
@@ -82,18 +87,16 @@ module Sprinkle
     end
     
     def process(roles, pre = false) #:nodoc:
-      assert_delivery
-      
-      description = @description.empty? ? @package.name : @description
+      description = @description.empty? ? " (#{@package.name})" : @description
       
       if logger.debug?
         logger.debug "#{@package.name}#{description} verification sequence: #{@commands.join('; ')} for roles: #{roles}\n"
       end
       
       unless Sprinkle::OPTIONS[:testing]
-        logger.info "#{" " * @options[:padding]}--> Verifying #{description}..."
+        logger.debug "#{" " * @options[:padding]}--> Verifying #{description}..."
         
-        unless @delivery.process(@package.name, @commands, roles, true)
+        unless @delivery.verify(self, roles)
           # Verification failed, halt sprinkling gracefully.
           raise Sprinkle::VerificationFailed.new(@package, description)
         end

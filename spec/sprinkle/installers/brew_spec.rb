@@ -3,7 +3,7 @@ require File.dirname(__FILE__) + '/../../spec_helper'
 describe Sprinkle::Installers::Brew do
 
   before do
-    @formula = mock(Sprinkle::Package, :name => 'formula')
+    @formula = mock(Sprinkle::Package, :name => 'formula', :sudo? => false)
   end
 
   def create_brew(*formulas, &block)
@@ -14,17 +14,17 @@ describe Sprinkle::Installers::Brew do
 
     it 'should accept a single package to install' do
       @installer = create_brew 'ruby'
-      @installer.formulas.should == [ 'ruby' ]
+      @installer.packages.should == [ 'ruby' ]
     end
 
     it 'should accept an array of packages to install' do
       @installer = create_brew %w( gcc gdb g++ )
-      @installer.formulas.should == ['gcc', 'gdb', 'g++']
+      @installer.packages.should == ['gcc', 'gdb', 'g++']
     end
 
     it 'should remove options from packages list' do
       @installer = create_brew 'ruby'
-      @installer.formulas.should == [ 'ruby' ]
+      @installer.packages.should == [ 'ruby' ]
     end
 
   end
@@ -46,8 +46,6 @@ describe Sprinkle::Installers::Brew do
     it 'should automatically insert pre/post commands for the specified package' do
       @installer.send(:install_sequence).should == [ 'op1', %(brew install ruby), 'op2' ]
     end
-
-    it 'should install a specific version if defined'
 
   end
   

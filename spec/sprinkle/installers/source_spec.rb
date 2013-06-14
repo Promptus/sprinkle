@@ -52,22 +52,22 @@ describe Sprinkle::Installers::Source do
 
     before do
       @settings = { :prefix => '/usr/local', :archives => '/usr/local/tmp', :builds => '/usr/local/stage' }
+      @settings.each { |k, v| @installer.send k, v }
     end
 
     it 'should fail if no installation area has been specified' do
-      @settings.delete(:prefix)
+      @installer.options[:prefix] = nil
     end
 
     it 'should fail if no build area has been specified' do
-      @settings.delete(:builds)
+      @installer.options[:builds] = nil
     end
 
     it 'should fail if no source download area has been specified' do
-      @settings.delete(:archives)
+      @installer.options[:archives] = nil
     end
 
     after do
-      @settings.each { |k, v| @installer.send k, v }
       lambda { @installer.install_sequence }.should raise_error
     end
 
@@ -76,35 +76,35 @@ describe Sprinkle::Installers::Source do
   describe 'customized configuration' do
 
     it 'should support specification of "enable" options' do
-      @installer.enable.first.should == %w( headers ssl deflate so )
+      @installer.enable.should == %w( headers ssl deflate so )
     end
 
     it 'should support specification of "disable" options' do
-      @installer.disable.first.should == %w( cache proxy rewrite )
+      @installer.disable.should == %w( cache proxy rewrite )
     end
 
     it 'should support specification of "with" options' do
-      @installer.with.first.should == %w( debug extras )
+      @installer.with.should == %w( debug extras )
     end
 
     it 'should support specification of "without" options' do
-      @installer.without.first.should == %w( fancyisms pandas )
+      @installer.without.should == %w( fancyisms pandas )
     end
 
     it 'should support specification of "option" options' do
-      @installer.option.first.should == %w( foo bar baz )
+      @installer.option.should == %w( foo bar baz )
     end
 
     it 'should support customized build area' do
-      @installer.prefix.first.should == '/usr/local'
+      @installer.prefix.should == '/usr/local'
     end
 
     it 'should support customized source area' do
-      @installer.archives.first.should == '/usr/local/archives'
+      @installer.archives.should == '/usr/local/archives'
     end
 
     it 'should support customized install area' do
-      @installer.builds.first.should == '/usr/local/builds'
+      @installer.builds.should == '/usr/local/builds'
     end
   end
 
@@ -285,9 +285,16 @@ describe Sprinkle::Installers::Source do
     it 'should run all pre-prepare commands' do
       @commands.each { |k, v| @installer.should_receive(:pre_commands).with(k).and_return(v) }
     end
+    
+    it "should be logged" do
+      pending
+    end
 
     it 'should be run relative to the source build area' do
-      @commands.each { |stage, command| @installer.send(:pre_commands, stage).first.should =~ %r{cd /usr/builds/ruby-1.8.6-p111} }
+      [:prepare, :download, :extract].each { |stage, command| 
+        @installer.send(:pre_commands, stage).first.should_not =~ %r{cd /usr/builds/ruby-1.8.6-p111} }
+      [:configure, :build, :install].each { |stage, command| 
+        @installer.send(:pre_commands, stage).first.should =~ %r{cd /usr/builds/ruby-1.8.6-p111} }
     end
 
     after do
@@ -318,7 +325,10 @@ describe Sprinkle::Installers::Source do
     end
 
     it 'should be run relative to the source build area' do
-      @commands.each { |stage, command| @installer.send(:post_commands, stage).first.should =~ %r{cd /usr/builds/ruby-1.8.6-p111} }
+      [:prepare, :download].each { |stage, command| 
+        @installer.send(:post_commands, stage).first.should_not =~ %r{cd /usr/builds/ruby-1.8.6-p111} }
+      [:extract, :configure, :build, :install].each { |stage, command| 
+        @installer.send(:post_commands, stage).first.should =~ %r{cd /usr/builds/ruby-1.8.6-p111} }
     end
 
     after do

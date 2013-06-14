@@ -21,6 +21,11 @@ describe Sprinkle::Installers::Rpm do
       @installer = create_rpm %w( gcc gdb g++ )
       @installer.packages.should == ['gcc', 'gdb', 'g++']
     end
+    
+    it 'should accept a list of packages to install' do
+      @installer = Sprinkle::Installers::Rpm.new(@package, "gcc", "gdb", "g++")
+      @installer.packages.should == ['gcc', 'gdb', 'g++']
+    end
 
   end
 
@@ -40,13 +45,6 @@ describe Sprinkle::Installers::Rpm do
 
     it 'should automatically insert pre/post commands for the specified package' do
       @installer.send(:install_sequence).should == [ 'op1', 'rpm -Uvh ruby', 'op2' ]
-    end
-
-    it 'should specify a non interactive mode to the apt installer' do
-      pending
-    end
-    it 'should install a specific version if defined' do
-      pending
     end
 
   end

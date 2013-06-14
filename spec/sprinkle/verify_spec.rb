@@ -18,6 +18,9 @@ describe Sprinkle::Verify do
         # Check a directory exists
         has_directory 'mydir'
         
+        # generic test
+        test "`version` == \"one\""
+        
         # Check for a user
         has_user "bob"
         
@@ -84,8 +87,12 @@ describe Sprinkle::Verify do
       @verification.commands.should include('test -d mydir')
     end
     
-    it 'should use id to check for user in group' do
-      @verification.commands.should include("id -G alf | xargs -n1 echo | grep alien")
+    it 'should include the generic test' do
+      @verification.commands.should include("test `version` == \"one\"")
+    end
+    
+    it 'should use to check for user in group' do
+      @verification.commands.should include("id -nG alf | xargs -n1 echo | grep alien")
     end
     
     it 'should use id to check for user' do
@@ -109,11 +116,11 @@ describe Sprinkle::Verify do
     end
 
     it 'should do a "test -x" to check for an executable' do
-      @verification.commands.should include("test -x /usr/bin/ruby")
+      @verification.commands.should include("which /usr/bin/ruby")
     end
 
     it 'should test the "which" command to look for a global executable' do
-      @verification.commands.should include('[ -n "`echo \`which rails\``" ]')
+      @verification.commands.should include('which rails')
     end
 
     it 'should test the process list to find a process' do
@@ -131,16 +138,15 @@ describe Sprinkle::Verify do
     it 'should check that an RPM is installed' do
       @verification.commands.should include("rpm -qa | grep ntp")
     end
-  end
 
-  describe 'with configurations' do
-    # Make sure it includes Sprinkle::Configurable
-    it 'should respond to configurable methods' do
-      @verification.should respond_to(:defaults)
+    it 'should delegate opts' do
+      @package.opts = {:tester_opt => "test-opt"}
+      @verification.opts[:tester_opt].should == "test-opt"
     end
 
-    it 'should default padding option to 4' do
-      @verification.padding.should eql(4)
+    it 'should delegate args' do
+      @package.args = ["test-arg"]
+      @verification.args[0].should == "test-arg"
     end
   end
 
@@ -157,12 +163,12 @@ describe Sprinkle::Verify do
       end
 
       it 'should call process on the delivery with the correct parameters' do
-        @delivery.should_receive(:process).with(@name, @verification.commands, [:app], true).once.and_return(true)
+        @delivery.should_receive(:verify).with(@verification, [:app]).once.and_return(true)
         @verification.process([:app])
       end
 
       it 'should raise Sprinkle::VerificationFailed exception when commands fail' do
-        @delivery.should_receive(:process).once.and_return(false)
+        @delivery.should_receive(:verify).once.and_return(false)
         lambda { @verification.process([:app]) }.should raise_error(Sprinkle::VerificationFailed) do |error|
           error.package.should eql(@package)
           error.description.should eql('moo')
@@ -173,7 +179,7 @@ describe Sprinkle::Verify do
     describe 'when testing' do
       before do
         Sprinkle::OPTIONS[:testing] = true
-        @logger = mock(ActiveSupport::BufferedLogger, :debug => true, :debug? => true)
+        @logger = mock(:debug => true, :debug? => true)
       end
 
       it 'should not call process on the delivery' do

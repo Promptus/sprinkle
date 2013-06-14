@@ -55,7 +55,7 @@ describe Sprinkle::Actors::Capistrano do
       end
 
       it 'should evaluate the block against the actor instance' do
-        @actor.loaded_recipes.should include('cool gear')
+        @actor.loaded_recipes.should == ['cool gear']
       end
 
     end
@@ -63,7 +63,8 @@ describe Sprinkle::Actors::Capistrano do
     describe 'without a block' do
 
       it 'should automatically load the default capistrano configuration' do
-        @cap.should_receive(:load).with('deploy').and_return
+        File.stub!(:exist?).with("Capfile").and_return true
+        @cap.should_receive(:load).with('Capfile').and_return
       end
 
       after do
@@ -77,17 +78,39 @@ describe Sprinkle::Actors::Capistrano do
   describe 'recipes' do
 
     it 'should add the recipe location to an internal store' do
-      @cap = create_cap do
-        recipes 'deploy'
-      end
+      @cap = create_cap { recipes "deploy" }
       @cap.loaded_recipes.should == [ @recipes ]
     end
 
     it 'should load the given recipe' do
       @cap.should_receive(:load).with(@recipes).and_return
-      create_cap
+      @cap = create_cap { recipes "deploy" }
     end
 
+  end
+  
+  describe 'verifications' do
+    
+    before do
+      @commands = %w( op1 op2 )
+      @roles    = %w( app )
+      @package = stub(:name => "name")
+      @cap = create_cap 
+      @verifier = stub(:package => @package, :commands => ["op1", "op2"])
+    end
+    
+    it "should return true if successful" do
+      @cap.stub!(:run).and_return
+      res = @cap.verify(@verifier, @roles)
+      res.should == true
+    end
+    
+    it "should return false if there was an error" do
+      @cap.stub!(:run).and_raise(::Capistrano::CommandError)
+      res = @cap.verify(@verifier, @roles)
+      res.should == false
+    end
+    
   end
 
   describe 'processing commands' do
@@ -101,6 +124,15 @@ describe Sprinkle::Actors::Capistrano do
       @cap.stub!(:run).and_return
       
       @testing_errors = false
+    end
+    
+    it "should strip excessive occurrences of sudo" do
+      # pretend the package or installer has also added sudo
+      @commands =["sudo op1"]
+      @cap.stub(:sudo_command).and_return("sudo")
+      @cap.config.stub!(:fetch).and_return(:sudo)
+      @cap.unstub!(:run)
+      @cap.config.should_receive(:invoke_command).with('op1', :via => :sudo).ordered.and_return
     end
 
     it 'should dynamically create a capistrano task containing the commands' do
@@ -118,17 +150,6 @@ describe Sprinkle::Actors::Capistrano do
       lambda { @cap.process @name, @commands, @roles }.should raise_error(::Capistrano::CommandError)
     end
     
-    it 'should not raise errors and instead return false when suppressing parameter is set' do
-      @testing_errors = true
-      
-      @cap.should_receive(:run).and_raise(::Capistrano::CommandError)
-      
-      value = nil
-      lambda { value = @cap.process(@name, @commands, @roles, true) }.should_not raise_error(::Capistrano::CommandError)
-      
-      value.should_not be
-    end
-
     after do
       @cap.process @name, @commands, @roles unless @testing_errors
     end
@@ -141,10 +162,14 @@ describe Sprinkle::Actors::Capistrano do
       @source = 'source'
 			@dest   = 'dest'
       @roles    = %w( app )
+      @commands = [:TRANSFER]
       @name     = 'name'
 
       @cap = create_cap do; recipes 'deploy'; end
       @cap.stub!(:run).and_return
+      
+      @package = Package.new(@name) {}
+      @installer = Sprinkle::Installers::Transfer.new(@package, "file.txt","/tmp/file.txt")
       
       @testing_errors = false
     end
@@ -164,19 +189,8 @@ describe Sprinkle::Actors::Capistrano do
       lambda { @cap.process @name, @commands, @roles }.should raise_error(::Capistrano::CommandError)
     end
     
-    it 'should not raise errors and instead return false when suppressing parameter is set' do
-      @testing_errors = true
-      
-      @cap.should_receive(:run).and_raise(::Capistrano::CommandError)
-      
-      value = nil
-      lambda { value = @cap.process(@name, @commands, @roles, true) }.should_not raise_error(::Capistrano::CommandError)
-      
-      value.should_not be
-    end
-
     after do
-      @cap.transfer @name, @source, @dest, @roles unless @testing_errors
+      @cap.process @package.name, @installer.install_sequence, @roles
     end
   end
 
@@ -188,15 +202,16 @@ describe Sprinkle::Actors::Capistrano do
       @name     = 'name'
 
       @cap = create_cap do; recipes 'deploy'; end
-      @cap.config.stub!(:fetch).and_return(:sudo)
       @cap.config.stub!(:invoke_command).and_return
     end
 
-    it 'should use sudo to invoke commands when so configured' do
-      @cap.config.should_receive(:fetch).with(:run_method, :sudo).and_return(:sudo)
+    it 'should run the supplied commands by default' do
+      @cap.config.should_receive(:invoke_command).with('op1', :via => :run).ordered.and_return
+      @cap.config.should_receive(:invoke_command).with('op2', :via => :run).ordered.and_return
     end
 
-    it 'should run the supplied commands' do
+    it 'should use sudo to invoke commands when so configured' do
+      @cap.config.set :run_method, :sudo
       @cap.config.should_receive(:invoke_command).with('op1', :via => :sudo).ordered.and_return
       @cap.config.should_receive(:invoke_command).with('op2', :via => :sudo).ordered.and_return
     end
@@ -221,6 +236,10 @@ describe Sprinkle::Actors::Capistrano do
 
       @cap = create_cap do; recipes 'deploy'; end
       @cap.config.stub!(:upload).and_return
+      
+      @package = Package.new(@name) {}
+      @installer = Sprinkle::Installers::Transfer.new(@package, @source, @dest, :recursive => true)
+      @cap.instance_variable_set("@installer", @installer)
     end
 
     it 'should call upload with the source and destination via :scp' do
@@ -233,7 +252,8 @@ describe Sprinkle::Actors::Capistrano do
     end
 
     after do
-      @cap.transfer @name, @source, @dest, @roles
+      @installer.instance_variable_set("@delivery", @cap)
+      @installer.process(@roles)
     end
   end
 
@@ -246,6 +266,10 @@ describe Sprinkle::Actors::Capistrano do
 
       @cap = create_cap do; recipes 'deploy'; end
       @cap.config.stub!(:upload).and_return
+      
+      @package = Package.new(@name) {}
+      @installer = Sprinkle::Installers::Transfer.new(@package, @source,@dest, :recursive => false)
+      @cap.instance_variable_set("@installer", @installer)
     end
 
     it 'should call upload with the source and destination via :scp' do
@@ -258,7 +282,8 @@ describe Sprinkle::Actors::Capistrano do
     end
 
     after do
-      @cap.transfer @name, @source, @dest, @roles, false
+      @installer.instance_variable_set("@delivery", @cap)
+      @installer.process(@roles)
     end
   end
 

@@ -13,7 +13,7 @@ module Sprinkle
     #   end
     #
     # If you user has access to 'sudo' and theres a file that requires
-    # priveledges, you can pass :sudo => true 
+    # privileges, you can pass :sudo => true 
     #
     #   package :magic_beans do
     #     replace_text 'Port 22', 'Port 2500', '/etc/ssh/sshd_config', :sudo => true
@@ -25,6 +25,12 @@ module Sprinkle
     #
     class ReplaceText < Installer
       attr_accessor :regex, :text, :path #:nodoc:
+      
+      api do
+        def replace_text(regex, text, path, options={}, &block)
+          install ReplaceText.new(self, regex, text, path, options, &block)
+        end
+      end
 
       def initialize(parent, regex, text, path, options={}, &block) #:nodoc:
         super parent, options, &block
@@ -32,12 +38,19 @@ module Sprinkle
         @text = text
         @path = path
       end
+      
+      def announce
+        log "--> Replace '#{@regex}' with '#{@text}' in file #{@path}"
+      end
 
       protected
-
+      
+        def escape_sed_arg(s)
+          escape_shell_arg(s).gsub("/", "\\\\/").gsub('&', '\\\&')
+        end
+      
         def install_commands #:nodoc:
-          logger.info "--> Replace '#{@regex}' with '#{@text}' in file #{@path}"
-          "#{'sudo ' if option?(:sudo)}sed -i 's/#{@regex.gsub("'", "'\\\\''").gsub("/", "\\\\/").gsub("\n", '\n')}/#{@text.gsub("'", "'\\\\''").gsub("/", "\\\\/").gsub("\n", '\n')}/g' #{@path}"
+          "#{sudo_cmd}sed -i 's/#{escape_sed_arg(@regex)}/#{escape_sed_arg(@text)}/g' #{@path}"
         end
 
     end
